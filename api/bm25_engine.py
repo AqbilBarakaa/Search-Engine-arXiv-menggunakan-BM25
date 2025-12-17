@@ -8,30 +8,31 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
-from tqdm import tqdm
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from rank_bm25 import BM25Okapi
 
-# Unduh resource NLTK yang dibutuhkan
-nltk.download('stopwords')
-nltk.download('wordnet')
+nltk.download('stopwords', quiet=True)
+nltk.download('wordnet', quiet=True)
 
-# --- PREPROCESSING ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+
+DATA_FILE = os.path.join(MODELS_DIR, 'full_data_processed.p')
+INDEX_FILE = os.path.join(MODELS_DIR, 'inverted_indices.p')
+RAW_DATA_FILE = os.path.join(DATA_DIR, 'arxiv-metadata-oai-snapshot.json')
+
+
 def preprocess(text):
     if not text or pd.isna(text):
         return ""
 
     stop_words = set(stopwords.words("english"))
-    
-    # Hapus karakter non-alfabet
     text = re.sub('[^a-zA-Z]', ' ', str(text))
     text = text.lower()
-    
-    # Bersihkan angka dan simbol
     text = re.sub("(\\d|\\W)+", " ", text)
     words = text.split()
     
-    # Simpan beberapa stopword penting untuk konteks ilmiah
     important_stopwords = {'no', 'not', 'nor', 'only', 'against', 'above', 'below'}
     stop_words = stop_words - important_stopwords
 
@@ -41,38 +42,40 @@ def preprocess(text):
 
     for word in words:
         if word not in stop_words:
-            stemmed = ps.stem(word)  # Stemming
-            lemmatized = lem.lemmatize(stemmed)  # Lemmatization
-            if len(lemmatized) > 1:  # Lewati karakter tunggal
+            stemmed = ps.stem(word) 
+            lemmatized = lem.lemmatize(stemmed)  
+            if len(lemmatized) > 1:  
                 processed_words.append(lemmatized)
 
     return " ".join(processed_words) if processed_words else ""
 
-# --- EKSTRAK DATA DARI JSON ---
-def getDataFromJson():
+
+def load_raw_data(limit=10000):
     data = []
-    with open('./data/arxiv-metadata-oai-snapshot.json', 'r') as f:
+    with open(RAW_DATA_FILE, 'r') as f:
         for i, line in enumerate(f):
             item = json.loads(line)
-            # Ambil hanya data yang memiliki abstrak dan judul
             if item.get("abstract") and item.get("title"):
                 data.append({
                     "paper_id": item.get("id", ""),
                     "title": item.get("title", ""),
                     "abstract": item.get("abstract", "")
                 })
-            if i >= 5000:  # Batasi data hingga 5000 dokumen
+            if i >= limit:
                 break
 
     df = pd.DataFrame(data)
     df["abstract"] = df["abstract"].apply(preprocess)
-    pickle.dump(df, open("full_data_processed_FINAL.p", "wb"))  # Simpan data yang sudah diproses
+    
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    pickle.dump(df, open(DATA_FILE, "wb"))
     return df
 
-# --- TF-IDF KEYWORDS ---
+
 def sort_coo(coo_matrix):
     tuples = zip(coo_matrix.col, coo_matrix.data)
     return sorted(tuples, key=lambda x: (x[1], x[0]), reverse=True)
+
 
 def extract_topn_from_vector(feature_names, sorted_items, topN):
     sorted_items = sorted_items[:topN]
@@ -82,7 +85,8 @@ def extract_topn_from_vector(feature_names, sorted_items, topN):
         feature_vals.append(feature_names[idx])
     return dict(zip(feature_vals, score_vals))
 
-def getAbstractKeywords(entry, cv, X, tfidf_transformer, feature_names, topN):
+
+def get_abstract_keywords(entry, cv, X, tfidf_transformer, feature_names, topN):
     abstract = entry['abstract']
     if type(abstract) == float:
         return []
@@ -91,26 +95,28 @@ def getAbstractKeywords(entry, cv, X, tfidf_transformer, feature_names, topN):
     keywords_dict = extract_topn_from_vector(feature_names, sorted_items, topN)
     return list(keywords_dict.keys())
 
-def getTitleKeywords(entry):
+
+def get_title_keywords(entry):
     title = preprocess(entry['title'])
     if type(title) == float:
         return []
     return title.split(' ')
 
-def getFinalKeywords(entry, cv, X, tfidf_trans, feature_names, topN):
-    # Gabungkan keyword dari abstrak dan judul
-    fromAbstract = getAbstractKeywords(entry, cv, X, tfidf_trans, feature_names, topN)
-    fromTitle = getTitleKeywords(entry)
-    return list(set(fromAbstract + fromTitle))
 
-def getCorpus(df):
+def get_final_keywords(entry, cv, X, tfidf_trans, feature_names, topN):
+    from_abstract = get_abstract_keywords(entry, cv, X, tfidf_trans, feature_names, topN)
+    from_title = get_title_keywords(entry)
+    return list(set(from_abstract + from_title))
+
+
+def get_corpus(df):
     return df['abstract'].tolist()
 
-def addKeywords(df, topN, makeFile, fileName):
+
+def add_keywords(df, topN=10):
     stop_words = stopwords.words("english")
-    corpus = getCorpus(df)
+    corpus = get_corpus(df)
     
-    # Gunakan CountVectorizer dengan filter fitur
     cv = CountVectorizer(max_df=0.8, stop_words=stop_words, max_features=1000)
     X = cv.fit_transform(corpus)
 
@@ -119,43 +125,42 @@ def addKeywords(df, topN, makeFile, fileName):
 
     feature_names = cv.get_feature_names_out()
 
-    # Tambahkan kolom keywords
     df = df.reindex(columns=['paper_id', 'title', 'abstract', 'keywords'])
-    df['keywords'] = df.apply(lambda row: getFinalKeywords(row, cv, X, tfidf_transformer, feature_names, topN), axis=1)
-
-    if makeFile:
-        pickle.dump(df, open(fileName, "wb"))
+    df['keywords'] = df.apply(lambda row: get_final_keywords(row, cv, X, tfidf_transformer, feature_names, topN), axis=1)
     return df
 
-def createInvertedIndices(df):
-    invertInd = {}
+
+def create_inverted_indices(df):
+    inverted_ind = {}
     for i in range(df.shape[0]):
         entry = df.iloc[i]
         paper_id = entry['paper_id']
         keywords = entry['keywords']
         for k in keywords:
-            invertInd.setdefault(k, []).append(paper_id)
-    return invertInd
+            inverted_ind.setdefault(k, []).append(paper_id)
+    return inverted_ind
 
-def organize():
-    # Fungsi utama untuk menyusun pipeline: load, ekstrak keyword, buat indeks
-    df = pickle.load(open("full_data_processed_FINAL.p", "rb"))
-    df_with_keywords = addKeywords(df, 10, False, "full_data_withKeywords_FINAL.p")
-    invertedIndices = createInvertedIndices(df_with_keywords)
-    pickle.dump(invertedIndices, open("invertedIndices_FINAL.p", "wb"))
 
-def getPotentialArticleSubset(query):
-    invertedIndices = pickle.load(open("invertedIndices_FINAL.p", "rb"))
+def build_index():
+    df = pickle.load(open(DATA_FILE, "rb"))
+    df_with_keywords = add_keywords(df, 10)
+    inverted_indices = create_inverted_indices(df_with_keywords)
+    pickle.dump(inverted_indices, open(INDEX_FILE, "wb"))
+    return inverted_indices
+
+
+def get_potential_articles(query):
+    inverted_indices = pickle.load(open(INDEX_FILE, "rb"))
     query = preprocess(query)
-    queryTerms = query.split(' ')
-    potentialArticles = []
-    for word in queryTerms:
-        if word in invertedIndices:
-            potentialArticles += invertedIndices[word]
-    return list(set(potentialArticles))
+    query_terms = query.split(' ')
+    potential_articles = []
+    for word in query_terms:
+        if word in inverted_indices:
+            potential_articles += inverted_indices[word]
+    return list(set(potential_articles))
 
-# --- BM25 RETRIEVAL ---
-def bm25(articles, df_dic, title_w, abstract_w, query):
+
+def bm25_search(articles, df_dic, query, title_weight=1.0, abstract_weight=2.0):
     if not articles:
         return []
 
@@ -179,8 +184,7 @@ def bm25(articles, df_dic, title_w, abstract_w, query):
     title_scores = bm25_title.get_scores(tokenized_query) if bm25_title else np.zeros(len(articles))
     abstract_scores = bm25_abstract.get_scores(tokenized_query) if bm25_abstract else np.zeros(len(articles))
 
-    # Kombinasikan skor dari judul dan abstrak menggunakan bobot
-    doc_scores = (title_w * title_scores) + (abstract_w * abstract_scores)
+    doc_scores = (title_weight * title_scores) + (abstract_weight * abstract_scores)
     doc_scores = np.maximum(0, doc_scores)
 
     results = []
@@ -190,31 +194,38 @@ def bm25(articles, df_dic, title_w, abstract_w, query):
             'paper_id': pid,
             'title': paper_data[0],
             'abstract': paper_data[1] if len(paper_data) > 1 else "",
-            'score': doc_scores[i],
-            'title_score': title_scores[i],
-            'abstract_score': abstract_scores[i]
+            'score': float(doc_scores[i]),
+            'title_score': float(title_scores[i]),
+            'abstract_score': float(abstract_scores[i])
         })
 
-    # Urutkan berdasarkan skor akhir
-    results = sorted(results, key=lambda x: x['score'], reverse=True)[:10]
+    results = sorted(results, key=lambda x: x['score'], reverse=True)
     return results
 
-# --- INTERFACE UNTUK RETRIEVAL ---
-def retrieve(query):
+
+def search(query):
     try:
-        df = pickle.load(open("full_data_processed_FINAL.p", "rb"))
+        df = pickle.load(open(DATA_FILE, "rb"))
         if df.empty:
-            raise ValueError("Loaded dataframe is empty!")
+            return []
             
         df_dic = df.set_index('paper_id').T.to_dict('list')
-        articles = getPotentialArticleSubset(query)
+        articles = get_potential_articles(query)
 
         if not articles:
-            print(f"No articles found for query: {query}")
             return []
 
-        results = bm25(articles, df_dic, 1, 2, query)  # title weight = 1, abstract weight = 2
-        return results
+        return bm25_search(articles, df_dic, query)
     except Exception as e:
-        print(f"Error in retrieve: {str(e)}")
+        print(f"Search error: {str(e)}")
         return []
+
+
+def init_data():
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    if not os.path.exists(DATA_FILE):
+        print("Loading raw data...")
+        load_raw_data()
+    if not os.path.exists(INDEX_FILE):
+        print("Building index...")
+        build_index()

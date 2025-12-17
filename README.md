@@ -1,23 +1,35 @@
 # Search-Engine-arXiv-menggunakan-BM25
-Website Search Engine menggunakan BM25 Menggunakan dataset arXiv
 
-## Menggunakan arXiv Dataset
-[arXiv Dataset](https://www.kaggle.com/datasets/Cornell-University/arxiv)
+Website Search Engine menggunakan algoritma BM25 untuk mencari paper akademis dari dataset arXiv.
 
-## Clone Repo
-   ```bash
-   # clone repo dengan git command berikut
-   $ git clone https://github.com/AqbilBarakaa/Search-Engine-arXiv-menggunakan-BM25.git
+## Teknologi
 
-   # masuk ke folder project
-   $ cd Search-Engine-arXiv-menggunakan-BM25
+- **Front-end:** HTML, Tailwind CSS, JavaScript
+- **Back-end:** Python, Flask (REST API)
+- **Algorithm:** BM25 (Best Matching 25)
+- **Data Processing:** Pandas, NLTK, Scikit-learn
 
-   # Buka di text editor
-   $ code .
-   ```
+## Dataset
+
+Menggunakan [arXiv Dataset](https://www.kaggle.com/datasets/Cornell-University/arxiv) dari Kaggle.
+
+## Instalasi
+
+```bash
+# Clone repo
+git clone https://github.com/AqbilBarakaa/Search-Engine-arXiv-menggunakan-BM25.git
+
+# Masuk ke folder project
+cd Search-Engine-arXiv-menggunakan-BM25
+
+# Install dependencies
+pip install -r requirements.txt
+```
 
 ## Run Aplikasi
-   ```bash
-   # Run Aplikasi
-   $ php artisan serve
-   ```
+
+```bash
+python app.py
+```
+
+Akses aplikasi di http://127.0.0.1:5000

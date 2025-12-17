@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arXiv Search Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 font-[Inter]">
+
+    <header class="bg-white/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 py-5">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/25">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800">arXiv Search Engine</h1>
+                    <p class="text-slate-400 text-xs">Powered by BM25 Algorithm</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-10">
+
+        <div class="text-center mb-10">
+            <h2 class="text-3xl font-bold text-slate-800 mb-3">Find Academic Papers</h2>
+            <p class="text-slate-500 max-w-lg mx-auto">Search through thousands of arXiv papers using advanced BM25
+                ranking algorithm</p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 p-6 mb-10">
+            <form id="searchForm" class="flex gap-3">
+                <div class="relative flex-1">
+                    <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input type="text" id="searchInput"
+                        class="w-full pl-12 pr-10 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent focus:bg-white transition-all"
+                        placeholder="Search for papers..." autocomplete="off">
+                    <button type="button" id="clearBtn"
+                        class="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-slate-200 hover:bg-slate-300 rounded-full items-center justify-center transition hidden"
+                        title="Clear search">
+                        <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <button type="submit" id="searchBtn"
+                    class="px-8 py-4 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all">
+                    Search
+                </button>
+            </form>
+
+            <div class="mt-5 flex flex-wrap items-center gap-2">
+                <span class="text-slate-400 text-sm">Popular searches:</span>
+                <button onclick="searchQuery('machine learning')"
+                    class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-primary-50 hover:text-primary-600 text-slate-600 rounded-lg transition">machine
+                    learning</button>
+                <button onclick="searchQuery('neural network')"
+                    class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-primary-50 hover:text-primary-600 text-slate-600 rounded-lg transition">neural
+                    network</button>
+                <button onclick="searchQuery('deep learning')"
+                    class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-primary-50 hover:text-primary-600 text-slate-600 rounded-lg transition">deep
+                    learning</button>
+                <button onclick="searchQuery('computer vision')"
+                    class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-primary-50 hover:text-primary-600 text-slate-600 rounded-lg transition">computer
+                    vision</button>
+            </div>
+        </div>
+
+        <div id="loadingState" class="hidden py-16 text-center">
+            <div
+                class="inline-block w-10 h-10 border-3 border-slate-200 border-t-primary-500 rounded-full animate-spin">
+            </div>
+            <p class="mt-4 text-slate-500">Searching papers...</p>
+        </div>
+
+        <div id="resultsContainer" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-semibold text-slate-800">Search Results</h3>
+                <span id="resultsCount" class="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full"></span>
+            </div>
+            <div id="resultsList" class="space-y-4"></div>
+        </div>
+
+        <div id="noResultsState" class="hidden py-16 text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-700">No results found</h3>
+            <p id="noResultsQuery" class="text-slate-500 mt-2"></p>
+        </div>
+
+        <div id="errorState" class="hidden py-16 text-center">
+            <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                    </path>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-red-600">Error occurred</h3>
+            <p id="errorMessage" class="text-slate-500 mt-2"></p>
+        </div>
+
+    </main>
+
+    <div id="paperModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal()"></div>
+        <div
+            class="absolute inset-4 md:inset-10 lg:inset-20 bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between p-6 border-b border-slate-200">
+                <h3 class="text-lg font-semibold text-slate-800">Paper Details</h3>
+                <button onclick="closeModal()"
+                    class="w-10 h-10 rounded-lg hover:bg-slate-100 flex items-center justify-center transition">
+                    <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modalContent" class="flex-1 overflow-y-auto p-6">
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>
